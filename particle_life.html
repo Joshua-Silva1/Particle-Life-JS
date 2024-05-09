@@ -429,11 +429,49 @@
     matrix[3][2].force = 0;
     matrix[3][3].force = 0.5;
   }};
+  var preset3 = { Preset3:function(){
+    matrix[0][0].force = 0.3;
+    matrix[0][1].force = 0.2;
+    matrix[0][2].force = 0.3;
+    matrix[0][3].force = 0.8;
+    matrix[1][0].force = -0.6;
+    matrix[1][1].force = 0.2;
+    matrix[1][2].force = 0.6;
+    matrix[1][3].force = -0.1;
+    matrix[2][0].force = 0;
+    matrix[2][1].force = 0.2;
+    matrix[2][2].force = 0.1;
+    matrix[2][3].force = 0.2;
+    matrix[3][0].force = 0.8;
+    matrix[3][1].force = -0.2;
+    matrix[3][2].force = -0.6;
+    matrix[3][3].force = 0.2;
+  }};
+  var preset4 = { Preset4:function(){
+    matrix[0][0].force = 0.5;
+    matrix[0][1].force = 0.6;
+    matrix[0][2].force = 0.1;
+    matrix[0][3].force = 0.6;
+    matrix[1][0].force = -0.4;
+    matrix[1][1].force = 0.2;
+    matrix[1][2].force = 0.1;
+    matrix[1][3].force = 0;
+    matrix[2][0].force = 0;
+    matrix[2][1].force = 0.8;
+    matrix[2][2].force = 0.3;
+    matrix[2][3].force = -1;
+    matrix[3][0].force = -0.6;
+    matrix[3][1].force = 0.7;
+    matrix[3][2].force = -0.6;
+    matrix[3][3].force = 0.3;
+  }};
 
   presetButtons.add(blankPreset,'BlankPreset');
   presetButtons.add(randomise,'Randomise');
   presetButtons.add(preset1,'Preset1');
   presetButtons.add(preset2,'Preset2');
+  presetButtons.add(preset3,'Preset3');
+  presetButtons.add(preset4,'Preset4');
   
 
     </script>
