@@ -1,0 +1,441 @@
+<html>
+  <head>
+    <title>Particle Life</title>
+  </head>
+
+  <style>
+  body {margin: 0;}
+  canvas {width: 100%; height: 100%;}
+  </style>
+
+  <body>
+	<link rel="shortcut icon" href="#">
+
+   
+    <style>
+    			body {
+    				font-family: Monospace;
+    				background-color: #000;
+    				color: #fff;
+    				margin: 0px;
+    				overflow: hidden;
+    			}
+    			#info {
+    				position: absolute;
+    				top: 10px;
+    				width: 100%;
+    				text-align: center;
+    			}
+    </style>
+
+    <div id="info">
+      <p>This is the first example using threeJS<br>
+      left button to rotate the scene, scroll to zoom in/out</p>
+    </div>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./build/three.module.js",
+          "three-noise": "./build/three-noise.module.js"
+				}
+			}
+		</script>
+		
+	<script type="module">
+
+    
+	import * as THREE from 'three';
+	import { OrbitControls } from './build/controls/OrbitControls.js';
+  //import { GUI } from './build/gui/lil-gui.module.min.js';
+  import { GUI } from './build/gui/dat.gui.module.js';
+
+    // create scene
+    var scene = new THREE.Scene( );
+    var ratio = window.innerWidth/window.innerHeight;
+
+    // perspective camera
+    const camera = new THREE.PerspectiveCamera(60,ratio,1,1000);
+    scene.add(camera);
+
+    //create the webgl renderer
+    var renderer = new THREE.WebGLRenderer( );
+
+    //set the size of the rendering window
+    renderer.setSize(window.innerWidth,window.innerHeight);
+
+    //add the renderer to the current document
+    document.body.appendChild(renderer.domElement );
+
+    //create the mesh of a cube
+    var geometry_cube = new THREE.BoxGeometry(1,1,1);
+    
+
+    // Simulation Parameters
+    const friction_half_life = 0.040;
+    var max_force_dist = 15;
+    var delta_time = 0.015;
+    var force_factor = 7;
+    var friction_factor = Math.pow(0.5, delta_time/friction_half_life);
+
+    
+    // PARAMETERS
+    var is_paused = true;
+    var particle_count = 1100;
+    var simulation_radius = new THREE.Vector3(70, 0, 70);
+    
+    var is_wire_framed = false;
+    var particles = [];
+    var mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
+
+
+    // EXAMPLE - GREEN ATTRACTED TO RED: rules.push(new Rule('Green', 'Red', -1.0));
+    function Rule (ca, cb, f){
+      this.colourA = ca;
+      this.colourB = cb;
+      this.force = f; // negatives create attraction force
+    }
+
+    function Colour (col, cName){
+      this.colour = col;
+      this.name = cName;
+      }
+
+    // Setting up Colours
+    var pColours = [];
+    pColours.push(new Colour(new THREE.Color(1,1,0), 'Yellow'));
+    pColours.push(new Colour(new THREE.Color(1,0,0), 'Red'));
+    pColours.push(new Colour(new THREE.Color(0,0,1), 'Blue'));
+    pColours.push(new Colour(new THREE.Color(0,1,0), 'Green'));
+    
+    var matrix = get_random_matrix();
+
+    // setup initial matrix sliders
+    // for (let c1 = 0; c1 < pColours.length; c1++) {
+    //   for (let c2 = 0; c2 < pColours.length; c2++) {
+    //     const interaction_factor = matrix[c1][c2];
+    //     rules[c1 + c2] = interaction_factor;
+    //   }
+    // }
+
+    //set the camera position
+    //camera.position.set(simulation_radius.x / 2, 100, simulation_radius.z / 2);
+    camera.position.x = simulation_radius.x / 2;
+    camera.position.y = 100;
+    camera.position.z = simulation_radius.z / 2;
+
+    //camera.lookAt(new THREE.Vector3(simulation_radius.x / 2, 0, simulation_radius.z / 2));
+    camera.lookAt(new THREE.Vector3(0, -10, 0));
+    renderer.render(scene, camera);
+    
+    // Drawing the cube area of the simulation
+    var simulation_mat = new THREE.MeshBasicMaterial();
+    //simulation_mat.color = new THREE.Color(1, 1, 1);
+    simulation_mat.transparent = true;
+    simulation_mat.opacity = 0.2;
+    simulation_mat.wireframe = true;
+
+    var sim_cube = new THREE.Mesh(geometry_cube,simulation_mat);
+    sim_cube.scale.x = simulation_radius.x;
+    sim_cube.scale.y = simulation_radius.y;
+    sim_cube.scale.z = simulation_radius.z;
+
+    sim_cube.position.x = simulation_radius.x / 2;
+    sim_cube.position.y = simulation_radius.y / 2;
+    sim_cube.position.z = simulation_radius.z / 2;
+
+    scene.add(sim_cube);
+
+    function get_random_matrix() {
+      const rows = [];
+      for (let i = 0; i < pColours.length; i++) {
+        const row = [];
+        for (let j = 0; j < pColours.length + 1; j++) {
+          if (i == pColours.length - 1 && j == pColours.length) { // slider fix
+            row.push(new Rule("--", "--", 0));
+          }
+          else {
+            row.push(new Rule(pColours[i], pColours[j], Math.random() * 2 - 1));
+          }
+          
+        }
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    function CreateScene()
+    {
+      for (var x = 0; x < particle_count; x++) {
+        //create the material of the cube (basic material)
+        var material_cube = new THREE.MeshBasicMaterial();
+      
+        //then set the renderer to wireframe
+        material_cube.wireframe = is_wire_framed;
+
+        //all the transformation are 4x4 matrices as
+        var rot2 = new THREE.Matrix4();
+        var sca = new THREE.Matrix4();
+        var rot = new THREE.Matrix4();
+        var tra = new THREE.Matrix4();
+        var combined = new THREE.Matrix4();
+
+        combined.multiply(tra);
+        combined.multiply(sca);
+
+        var cube = new THREE.Mesh(geometry_cube,material_cube);
+
+        // Setting colours
+        var c = Math.floor((x / particle_count) * pColours.length);
+        material_cube.color =  pColours[c].colour;
+        cube.userData.pColour = pColours[c].name;
+        cube.userData.pColourNum = c;
+
+        cube.applyMatrix4(combined);
+
+        cube.position.x = mid_point.x + (Math.random() - 0.5) * simulation_radius.x;
+        cube.position.y = mid_point.y + (Math.random() - 0.5) * simulation_radius.y;
+        cube.position.z = mid_point.z + (Math.random() - 0.5) * simulation_radius.z;
+        
+        cube.userData.vx = 0;//Math.random();
+        cube.userData.vy = 0;//Math.random();
+        cube.userData.vz = 0;//Math.random();
+
+        particles.push(cube);
+        scene.add(particles[x]);
+      }
+    }
+ 
+  CreateScene();
+  //////////////
+	// CONTROLS //
+	//////////////
+
+	// move mouse and: left   click to rotate,
+	//                 middle click to zoom,
+	//                 right  click to pan
+  // add the new control and link to the current camera to transform its position
+
+  var controls = new OrbitControls( camera, renderer.domElement );
+  controls.target = mid_point;
+
+  //controls.target = new THREE.Vector3(map_width/2,10,map_width/2);
+
+  //controls.autoRotate = true;
+
+  function get_force(distance, interaction_force) {
+    const inflection_distance = 0.3;
+    if (distance < inflection_distance) {
+      return distance / inflection_distance - 1;
+    }
+    else if (inflection_distance < distance && distance < 1) {
+      return interaction_force * (1 - Math.abs(2 * distance - 1 - inflection_distance) / (1 - inflection_distance));
+    }
+    else {
+      return 0;
+    }
+  }
+
+
+  var Animate = function() {
+    simulation_step();
+  }
+  
+  var simulation_step = function() {
+    // Update velocities
+    for (var i = 0; i < particle_count; i++) {
+      let totalForceX = 0;
+      let totalForceY = 0;
+      let totalForceZ = 0;
+
+      const partA = particles[i];
+      for (var j = 0; j < particle_count; j++) {
+        if (j === i) continue;
+        const partB = particles[j];
+
+        // Calculate distances
+        const distX = partB.position.x - partA.position.x;
+        const distY = partB.position.y - partA.position.y;
+        const distZ = partB.position.z - partA.position.z;
+        const dist = Math.sqrt(distX * distX + distY * distY + distZ * distZ);
+
+        // Check particle pair is within min and max distances
+        if (dist > 0 && dist < max_force_dist) {
+          const force = get_force(dist / max_force_dist, matrix[partA.userData.pColourNum][partB.userData.pColourNum].force);
+          totalForceX += distX / dist * force;
+          totalForceY += distY / dist * force;
+          totalForceZ += distZ / dist * force;
+        }
+
+      }
+
+      // Scale by max
+      totalForceX *= max_force_dist * force_factor;
+      totalForceY *= max_force_dist * force_factor;
+      totalForceZ *= max_force_dist * force_factor;
+
+      // Apply Friction to velocity
+      partA.userData.vx *= friction_factor;
+      partA.userData.vy *= friction_factor;
+      partA.userData.vz *= friction_factor;
+
+      // Add force to particle velocity
+      partA.userData.vx += totalForceX * delta_time;
+      partA.userData.vy += totalForceY * delta_time;
+      partA.userData.vz += totalForceZ * delta_time;
+    }
+
+    // Update positions
+    for (var i = 0; i < particle_count; i++) {
+      particles[i].position.x += particles[i].userData.vx * delta_time;
+      particles[i].position.y += particles[i].userData.vy * delta_time;
+      particles[i].position.z += particles[i].userData.vz * delta_time;
+
+      // Screen wrapping
+      if (particles[i].position.x > simulation_radius.x) { particles[i].position.x = 1; }
+      else if (particles[i].position.x < 0) { particles[i].position.x = simulation_radius.x -1; }
+
+      if (particles[i].position.y > simulation_radius.y) { particles[i].position.y = 1; }
+      else if (particles[i].position.y < 0) { particles[i].position.y = simulation_radius.y -1; }
+
+      if (particles[i].position.z > simulation_radius.z) { particles[i].position.z = 1; }
+      else if (particles[i].position.z < 0) { particles[i].position.z = simulation_radius.z -1; }
+    }
+  }
+
+  // final update loop
+  var MyUpdateLoop = function ( )
+  {
+    
+    controls.update();
+
+    // call the render with the scene and the camera
+    renderer.render(scene,camera);
+
+    // finally perform a recursive call to update again
+    // this must be called because the mouse changes the camera position
+    requestAnimationFrame(MyUpdateLoop);
+    if (!is_paused) { Animate(); }
+  };
+
+  requestAnimationFrame(MyUpdateLoop);
+
+  // this function is called when the window is resized
+  var MyResize = function ( )
+  {
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+    renderer.setSize(width,height);
+    camera.aspect = width/height;
+    camera.updateProjectionMatrix();
+    renderer.render(scene,camera);
+  };
+
+  // link the resize of the window to the update of the camera
+  window.addEventListener( 'resize', MyResize);
+
+  var fake_var = 0;
+
+  const gui = new GUI();
+  const myStruct =
+  {
+    pause: is_paused,
+    max_dist: max_force_dist,
+    for_fac: force_factor,
+    dt: delta_time
+  };
+
+  let folderParameters = gui.addFolder("Parameters");
+
+  folderParameters.add(myStruct, "pause").name("Pause").onChange(value => { is_paused = value; });
+  folderParameters.add(myStruct, "max_dist", 2, 50, 1).name("Particle Spread").onChange(value => { max_force_dist = value; });
+  folderParameters.add(myStruct, "for_fac", 1, 30, 1).name("Force Scale").onChange(value => { force_factor = value; });
+  folderParameters.add(myStruct, "dt", 0.0001, 0.04, 0.0001).name("Sim Speed").onChange(value => { delta_time = value; friction_factor = Math.pow(0.5, delta_time / friction_half_life); });
+  folderParameters.add(simulation_radius, "y", 0, 100, 5).name("Sim Depth").onChange(value => {
+    simulation_radius.y = value;
+    sim_cube.scale.y = value;
+    sim_cube.position.y = value / 2;
+    for (var i = 0; i < particle_count; i++) {
+      particles[i].position.y = Math.random() * value;
+    }
+  });
+
+  // Interaction parameters
+  let interactionParameters = folderParameters.addFolder("Interactions");
+  for (let c1 = 0; c1 < pColours.length; c1++) {
+    for (let c2 = 0; c2 < pColours.length + 1; c2++) {
+      if (c1 <= pColours.length - 1 && c2 < pColours.length) {
+
+        var rule = matrix[c1][c2];
+        if (rule.colourA != "--") {
+          const para_name = pColours[c1].name + " X " + pColours[c2].name;
+          interactionParameters.add(rule, "force", -1.0, 1.0, 0.1).name(para_name).onChange(value => { rule.force = value; }).listen();
+        }
+    }
+    }
+  }
+
+  // Preset Buttons
+  let presetButtons = gui.addFolder("Presets");
+  var randomise = { Randomise:function(){
+    for (let i = 0; i < pColours.length; i++) {
+      for (let j = 0; j < pColours.length; j++) {
+        matrix[i][j].force = Math.random() * 2 - 1;
+      }
+    }
+    gui.updateDisplay();
+  }};
+  var blankPreset = { BlankPreset:function(){
+    for (let i = 0; i < pColours.length; i++) {
+      for (let j = 0; j < pColours.length; j++) {
+        matrix[i][j].force = 0;
+      }
+    }
+    gui.updateDisplay();
+  }};
+  var preset1 = { Preset1:function(){
+    matrix[0][0].force = 0.17;
+    matrix[0][1].force = 0.17;
+    matrix[0][2].force = 0.14;
+    matrix[0][3].force = 0.14;
+    matrix[1][0].force = 0.20;
+    matrix[1][1].force = 0.34;
+    matrix[1][2].force = -0.24;
+    matrix[1][3].force = -0.20;
+    matrix[2][0].force = 0.50;
+    matrix[2][1].force = 0.50;
+    matrix[2][2].force = 0.50;
+    matrix[2][3].force = 0.50;
+    matrix[3][0].force = 0.20;
+    matrix[3][1].force = 0.40;
+    matrix[3][2].force = 0.14;
+    matrix[3][3].force = -0.25;
+  }};
+  var preset2 = { Preset2:function(){
+    matrix[0][0].force = 0.5;
+    matrix[0][1].force = 1;
+    matrix[0][2].force = 0;
+    matrix[0][3].force = 0;
+    matrix[1][0].force = 0;
+    matrix[1][1].force = 0.5;
+    matrix[1][2].force = 1;
+    matrix[1][3].force = 0;
+    matrix[2][0].force = 0;
+    matrix[2][1].force = 0;
+    matrix[2][2].force = 0.5;
+    matrix[2][3].force = 1;
+    matrix[3][0].force = 1;
+    matrix[3][1].force = 0;
+    matrix[3][2].force = 0;
+    matrix[3][3].force = 0.5;
+  }};
+
+  presetButtons.add(blankPreset,'BlankPreset');
+  presetButtons.add(randomise,'Randomise');
+  presetButtons.add(preset1,'Preset1');
+  presetButtons.add(preset2,'Preset2');
+  
+
+    </script>
+  </body>
+</html>
