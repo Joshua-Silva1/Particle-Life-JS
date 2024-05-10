@@ -15,7 +15,7 @@
     <style>
     			body {
     				font-family: Monospace;
-    				background-color: #000;
+    				background-color: #000000;
     				color: #fff;
     				margin: 0px;
     				overflow: hidden;
@@ -41,14 +41,109 @@
 				}
 			}
 		</script>
+
+    <script type="x-shader/x-vertex" id="vertex_shader_simple">
+      void main() {
+        vec4 ViewPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * ViewPosition;
+      }
+    </script>
+
+    <script type="x-shader/x-fragment" id="fragment_shader_simple">
+      uniform vec3 pCol;
+      uniform float neighbour_count;
+
+      void main() {
+        vec3 c = vec3(1, 1, 1) - pCol;
+        gl_FragColor = vec4(pCol + c * neighbour_count, 1.0);
+      }
+    </script>
 		
 	<script type="module">
 
     
 	import * as THREE from 'three';
 	import { OrbitControls } from './build/controls/OrbitControls.js';
-  //import { GUI } from './build/gui/lil-gui.module.min.js';
   import { GUI } from './build/gui/dat.gui.module.js';
+  
+    
+    // EXAMPLE - GREEN ATTRACTED TO RED: rules.push(new Rule('Green', 'Red', 1.0));
+    function Rule (ca, cb, f){
+        this.colourA = ca;
+        this.colourB = cb;
+        this.force = f; // positive values create attraction force
+    }
+
+    function Colour (col, cName){
+      this.colour = col;
+      this.name = cName;
+    }
+
+    // PALETTES
+    const backgrounds = [ new THREE.Color("#0f0f0f"), new THREE.Color("#f0f6e8"), new THREE.Color("#2f2442"),
+                          new THREE.Color("#95d9bc")
+    ];
+    const palette1 = [
+      new Colour(new THREE.Color(1,1,0), 'Yellow'), new Colour(new THREE.Color(1,0,0), 'Red'), new Colour(new THREE.Color(0,0,1), 'Blue'),
+      new Colour(new THREE.Color(0,1,0), 'Green'), new Colour(new THREE.Color(0.3,0,1), 'Purple'), new Colour(new THREE.Color(1,0.5,0), 'Orange')];
+    const palette2 = [
+      new Colour(new THREE.Color("#f0dab1"), 'Yellow'), new Colour(new THREE.Color("#e39aac"), 'Orange'), new Colour(new THREE.Color("#c45d9f"), 'Red'),
+      new Colour(new THREE.Color("#634b7d"), 'Purple'), new Colour(new THREE.Color("#6461c2"), 'Blue'), new Colour(new THREE.Color("#2ba9b4"), 'Green')
+    ];
+    const palette3 = [
+      new Colour(new THREE.Color("#f3c4d8"), 'Pink1'), new Colour(new THREE.Color("#e18dcb"), 'Pink2'), new Colour(new THREE.Color("#c760bc"), 'Pink3'),
+      new Colour(new THREE.Color("#b44db7"), 'Pink4'), new Colour(new THREE.Color("#783a8d"), 'Purple1'), new Colour(new THREE.Color("#603b7f"), 'Purple2')
+    ];
+    const palette4 = [
+      new Colour(new THREE.Color("#6bad92"), 'Green1'), new Colour(new THREE.Color("#377a5d"), 'Green2'), new Colour(new THREE.Color("#2b5744"), 'Green3'),
+      new Colour(new THREE.Color("#263d32"), 'Green4'), new Colour(new THREE.Color("#1b2621"), 'Green5'), new Colour(new THREE.Color("#131a17"), 'Green6')
+    ];
+    const palettes = [palette1, palette2, palette3, palette4];
+    
+    // Setting up Colours
+    var pColours = [];
+
+    // ---------------------------- ---------------- ---------------------------- //
+    // ---------------------------- SIMULATION SPECS ---------------------------- //
+    // ---------------------------- ---------------- ---------------------------- //
+    // Simulation Parameters
+    var max_force_dist = 10;
+    var inflection_distance = 0.2;
+    var delta_time = 0.01;
+    var force_factor = 7;
+    var is_paused = true;
+    var simulation_radius = new THREE.Vector3(100, 0, 100);
+    var particles_scale = 1.0;
+    var colour_count = 4; // 1-6
+
+    // Shader params
+    var shader_enabled = false; // cell-finder shader -> grays out lonely particles, vibrant colours for cells
+    var cell_finder_size = 200;
+    var palette_num = 0; // 0-3
+
+    //pColours = palettes[palette_num];
+    for (let i = 0; i < colour_count; i++) {
+      pColours.push(palettes[palette_num][i]);
+    }
+
+    const steps_till_update = 10;
+    const optimisation_toggle = true;
+    var current_step = 0;
+
+    // Simulation fixed properties
+    const friction_half_life = 0.040;
+    const particle_count = 1800; // 1000 - 2000
+    var friction_factor = Math.pow(0.5, delta_time/friction_half_life);
+    var is_wire_framed = false;
+
+    // Other vars
+    var matrix = get_random_matrix(colour_count);
+    var particles = [];
+    var mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
+    
+    // ---------------------------- ---------------- ---------------------------- //
+    // ---------------------------- ---------------- ---------------------------- //
+
 
     // create scene
     var scene = new THREE.Scene( );
@@ -60,6 +155,7 @@
 
     //create the webgl renderer
     var renderer = new THREE.WebGLRenderer( );
+    renderer.setClearColor(backgrounds[palette_num]);
 
     //set the size of the rendering window
     renderer.setSize(window.innerWidth,window.innerHeight);
@@ -70,54 +166,6 @@
     //create the mesh of a cube
     var geometry_cube = new THREE.BoxGeometry(1,1,1);
     
-
-    // Simulation Parameters
-    const friction_half_life = 0.040;
-    var max_force_dist = 15;
-    var delta_time = 0.015;
-    var force_factor = 7;
-    var friction_factor = Math.pow(0.5, delta_time/friction_half_life);
-
-    
-    // PARAMETERS
-    var is_paused = true;
-    var particle_count = 1100;
-    var simulation_radius = new THREE.Vector3(70, 0, 70);
-    
-    var is_wire_framed = false;
-    var particles = [];
-    var mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
-
-
-    // EXAMPLE - GREEN ATTRACTED TO RED: rules.push(new Rule('Green', 'Red', -1.0));
-    function Rule (ca, cb, f){
-      this.colourA = ca;
-      this.colourB = cb;
-      this.force = f; // negatives create attraction force
-    }
-
-    function Colour (col, cName){
-      this.colour = col;
-      this.name = cName;
-      }
-
-    // Setting up Colours
-    var pColours = [];
-    pColours.push(new Colour(new THREE.Color(1,1,0), 'Yellow'));
-    pColours.push(new Colour(new THREE.Color(1,0,0), 'Red'));
-    pColours.push(new Colour(new THREE.Color(0,0,1), 'Blue'));
-    pColours.push(new Colour(new THREE.Color(0,1,0), 'Green'));
-    
-    var matrix = get_random_matrix();
-
-    // setup initial matrix sliders
-    // for (let c1 = 0; c1 < pColours.length; c1++) {
-    //   for (let c2 = 0; c2 < pColours.length; c2++) {
-    //     const interaction_factor = matrix[c1][c2];
-    //     rules[c1 + c2] = interaction_factor;
-    //   }
-    // }
-
     //set the camera position
     //camera.position.set(simulation_radius.x / 2, 100, simulation_radius.z / 2);
     camera.position.x = simulation_radius.x / 2;
@@ -132,7 +180,7 @@
     var simulation_mat = new THREE.MeshBasicMaterial();
     //simulation_mat.color = new THREE.Color(1, 1, 1);
     simulation_mat.transparent = true;
-    simulation_mat.opacity = 0.2;
+    simulation_mat.opacity = 0.1;
     simulation_mat.wireframe = true;
 
     var sim_cube = new THREE.Mesh(geometry_cube,simulation_mat);
@@ -146,30 +194,32 @@
 
     scene.add(sim_cube);
 
-    function get_random_matrix() {
-      const rows = [];
-      for (let i = 0; i < pColours.length; i++) {
-        const row = [];
-        for (let j = 0; j < pColours.length + 1; j++) {
-          if (i == pColours.length - 1 && j == pColours.length) { // slider fix
-            row.push(new Rule("--", "--", 0));
-          }
-          else {
-            row.push(new Rule(pColours[i], pColours[j], Math.random() * 2 - 1));
-          }
-          
-        }
-        rows.push(row);
-      }
-      return rows;
-    }
+    // ---------------------------- ---------------- ---------------------------- //
+    // ---------------------------- ---------------- ---------------------------- //
+
+    
+
+    // ---------------------------- ---------------- ---------------------------- //
+    // ---------------------------- ---------------- ---------------------------- //
 
     function CreateScene()
     {
-      for (var x = 0; x < particle_count; x++) {
+      for (var i = 0; i < particle_count; i++) {
+        // Grab colour
+        var c = Math.floor((i / particle_count) * pColours.length);
+
         //create the material of the cube (basic material)
-        var material_cube = new THREE.MeshBasicMaterial();
-      
+        //var material_cube = new THREE.MeshBasicMaterial();
+        var material_cube = new THREE.ShaderMaterial( {
+          vertexShader: document.getElementById('vertex_shader_simple').textContent,
+          fragmentShader: document.getElementById('fragment_shader_simple').textContent,
+          uniforms: {
+            pCol: {value: pColours[c].colour},
+            neighbour_count: {value: 0}
+          },
+        });
+        material_cube.transparent = true;
+
         //then set the renderer to wireframe
         material_cube.wireframe = is_wire_framed;
 
@@ -186,7 +236,6 @@
         var cube = new THREE.Mesh(geometry_cube,material_cube);
 
         // Setting colours
-        var c = Math.floor((x / particle_count) * pColours.length);
         material_cube.color =  pColours[c].colour;
         cube.userData.pColour = pColours[c].name;
         cube.userData.pColourNum = c;
@@ -201,12 +250,25 @@
         cube.userData.vy = 0;//Math.random();
         cube.userData.vz = 0;//Math.random();
 
+        if (optimisation_toggle) {
+          cube.userData.neighbours = [];
+        }
+
+        cube.scale.x = particles_scale;
+        cube.scale.y = particles_scale;
+        cube.scale.z = particles_scale;
+
         particles.push(cube);
-        scene.add(particles[x]);
+        scene.add(particles[i]);
       }
     }
+
+    
  
   CreateScene();
+  if (optimisation_toggle) { update_neighbours; }
+  
+  
   //////////////
 	// CONTROLS //
 	//////////////
@@ -219,12 +281,8 @@
   var controls = new OrbitControls( camera, renderer.domElement );
   controls.target = mid_point;
 
-  //controls.target = new THREE.Vector3(map_width/2,10,map_width/2);
-
-  //controls.autoRotate = true;
-
   function get_force(distance, interaction_force) {
-    const inflection_distance = 0.3;
+    
     if (distance < inflection_distance) {
       return distance / inflection_distance - 1;
     }
@@ -236,12 +294,34 @@
     }
   }
 
-
-  var Animate = function() {
-    simulation_step();
+  function get_random_matrix(size) {
+    const rows = [];
+    for (let i = 0; i < size; i++) {
+      const row = [];
+      for (let j = 0; j < size; j++) {
+        row.push(new Rule(pColours[i], pColours[j], Math.random() * 2 - 1));
+      }
+      rows.push(row);
+    }
+    return rows;
   }
+
   
-  var simulation_step = function() {
+  
+  var Animate = function() {
+    if (optimisation_toggle) {
+      if (current_step % steps_till_update == 0) {
+        update_neighbours();
+      }
+      optimised_simulation_step();
+    }
+    else {
+      simulation_step();
+    }
+    current_step++;
+  }
+
+  function simulation_step () {
     // Update velocities
     for (var i = 0; i < particle_count; i++) {
       let totalForceX = 0;
@@ -285,8 +365,103 @@
       partA.userData.vz += totalForceZ * delta_time;
     }
 
-    // Update positions
+    
     for (var i = 0; i < particle_count; i++) {
+      // Update positions
+      particles[i].position.x += particles[i].userData.vx * delta_time;
+      particles[i].position.y += particles[i].userData.vy * delta_time;
+      particles[i].position.z += particles[i].userData.vz * delta_time;
+
+      // Screen wrapping
+      if (particles[i].position.x > simulation_radius.x) { particles[i].position.x = 1; }
+      else if (particles[i].position.x < 0) { particles[i].position.x = simulation_radius.x -1; }
+
+      if (particles[i].position.y > simulation_radius.y) { particles[i].position.y = 1; }
+      else if (particles[i].position.y < 0) { particles[i].position.y = simulation_radius.y -1; }
+
+      if (particles[i].position.z > simulation_radius.z) { particles[i].position.z = 1; }
+      else if (particles[i].position.z < 0) { particles[i].position.z = simulation_radius.z -1; }
+    }
+  }
+
+  function update_neighbours() {
+    for (var i = 0; i < particle_count; i++) {
+      const partA = particles[i];
+      var new_neighbours = [];
+      for (var j = 0; j < particle_count; j++) {
+        if (j === i) continue;
+        const partB = particles[j];
+
+        const distX = partB.position.x - partA.position.x;
+        const distY = partB.position.y - partA.position.y;
+        const distZ = partB.position.z - partA.position.z;
+        const dist = Math.sqrt(distX * distX + distY * distY + distZ * distZ);
+        
+
+        // Check particle pair is within min and max distances
+        if (dist < max_force_dist) {
+          new_neighbours.push(partB);
+        }
+      }
+      partA.userData.neighbours = new_neighbours;
+      if (shader_enabled) {
+        partA.material.uniforms.neighbour_count.value = Math.min(1 - new_neighbours.length / cell_finder_size, 1.0);//Math.min(1 - partA.userData.neighbours.length / 200, 1.0);
+      }
+    }
+  }
+
+  function optimised_simulation_step () {
+    // Update velocities
+    for (var i = 0; i < particle_count; i++) {
+      let totalForceX = 0;
+      let totalForceY = 0;
+      let totalForceZ = 0;
+
+      const partA = particles[i];
+      for (var j = 0; j < partA.userData.neighbours.length; j++) {
+        if (j === i) continue;
+        const partB = partA.userData.neighbours[j];
+
+        // Calculate distances
+        const distX = partB.position.x - partA.position.x;
+        const distY = partB.position.y - partA.position.y;
+        const distZ = partB.position.z - partA.position.z;
+        const dist = Math.sqrt(distX * distX + distY * distY + distZ * distZ);
+
+        // Check particle pair is within min and max distances
+        if (dist > 0 && dist < max_force_dist) {
+          const force = get_force(dist / max_force_dist, matrix[partA.userData.pColourNum][partB.userData.pColourNum].force);
+          totalForceX += distX / dist * force;
+          totalForceY += distY / dist * force;
+          totalForceZ += distZ / dist * force;
+        }
+      }
+
+      // Scale by max
+      totalForceX *= max_force_dist * force_factor;
+      totalForceY *= max_force_dist * force_factor;
+      totalForceZ *= max_force_dist * force_factor;
+
+      // Apply Friction to velocity
+      partA.userData.vx *= friction_factor;
+      partA.userData.vy *= friction_factor;
+      partA.userData.vz *= friction_factor;
+
+      // Add force to particle velocity
+      partA.userData.vx += totalForceX * delta_time;
+      partA.userData.vy += totalForceY * delta_time;
+      partA.userData.vz += totalForceZ * delta_time;
+
+      //partA.material.uniforms.speed.value = 0.5 + ((totalForceX * delta_time) / partA.userData.vx) / 2;
+      //const v = partA.userData.vx + partA.userData.vy + partA.userData.vz;
+      //partA.material.uniforms.speed.value = Math.min(Math.abs((v / 120) - 1), 0.9);
+      //if (v / 100 > 1.0) { console.log(v); }
+      
+    }
+
+    
+    for (var i = 0; i < particle_count; i++) {
+      // Update positions
       particles[i].position.x += particles[i].userData.vx * delta_time;
       particles[i].position.y += particles[i].userData.vy * delta_time;
       particles[i].position.z += particles[i].userData.vz * delta_time;
@@ -309,11 +484,14 @@
     
     controls.update();
 
+    
+
     // call the render with the scene and the camera
     renderer.render(scene,camera);
 
     // finally perform a recursive call to update again
     // this must be called because the mouse changes the camera position
+    
     requestAnimationFrame(MyUpdateLoop);
     if (!is_paused) { Animate(); }
   };
@@ -334,50 +512,188 @@
   // link the resize of the window to the update of the camera
   window.addEventListener( 'resize', MyResize);
 
-  var fake_var = 0;
+  // ---------------------------- --- ---------------------------- //
+  // ---------------------------- GUI ---------------------------- //
+  // ---------------------------- --- ---------------------------- //
 
   const gui = new GUI();
   const myStruct =
   {
     pause: is_paused,
     max_dist: max_force_dist,
+    min_dist: inflection_distance,
     for_fac: force_factor,
-    dt: delta_time
+    dt: delta_time,
+    p_scale: particles_scale,
+    shader_toggle: shader_enabled,
+    cell_size: cell_finder_size,
+    palette: palette_num,
+    col_count: colour_count
   };
 
   let folderParameters = gui.addFolder("Parameters");
 
   folderParameters.add(myStruct, "pause").name("Pause").onChange(value => { is_paused = value; });
-  folderParameters.add(myStruct, "max_dist", 2, 50, 1).name("Particle Spread").onChange(value => { max_force_dist = value; });
+  folderParameters.add(myStruct, "max_dist", 2, 50, 1).name("Max Force Dist").onChange(value => { max_force_dist = value; });
+  folderParameters.add(myStruct, "min_dist", 0.05, 0.8, 0.05).name("Min Force Dist").onChange(value => { inflection_distance = value; });
   folderParameters.add(myStruct, "for_fac", 1, 30, 1).name("Force Scale").onChange(value => { force_factor = value; });
   folderParameters.add(myStruct, "dt", 0.0001, 0.04, 0.0001).name("Sim Speed").onChange(value => { delta_time = value; friction_factor = Math.pow(0.5, delta_time / friction_half_life); });
-  folderParameters.add(simulation_radius, "y", 0, 100, 5).name("Sim Depth").onChange(value => {
+  folderParameters.add(simulation_radius, "x", 5, 300, 5).name("Sim Size").onChange(value => {
+    simulation_radius.x = value;
+    simulation_radius.z = value;
+    sim_cube.scale.x = value;
+    sim_cube.scale.z = value;
+    sim_cube.position.x = value / 2;
+    sim_cube.position.z = value / 2;
+    // update camera
+    mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
+    controls.target = mid_point;
+  });
+  folderParameters.add(simulation_radius, "y", 0, 300, 5).name("Sim Depth").onChange(value => {
     simulation_radius.y = value;
     sim_cube.scale.y = value;
     sim_cube.position.y = value / 2;
+    mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
+    controls.target = mid_point;
     for (var i = 0; i < particle_count; i++) {
       particles[i].position.y = Math.random() * value;
     }
   });
+  folderParameters.add(myStruct, "p_scale", 0.1, 1.5, 0.1).name("Particle Size").onChange(value => {
+    particles_scale = value;
+    for (var i = 0; i < particle_count; i++) {
+      particles[i].scale.x = particles_scale;
+      particles[i].scale.y = particles_scale;
+      particles[i].scale.z = particles_scale;
+    }
+  });
+  folderParameters.add(myStruct, "col_count", 1, 6, 1).name("Colour Count").onChange(value => {
+    const pause_state = is_paused;
+    is_paused = true;
+
+    // -- REDUCING COLOUR COUNT
+    if (value < colour_count) {
+      // Resize pColours
+      while (pColours.length > value) {
+        pColours.pop();
+      }
+
+      // Resize matrix
+      while (matrix.length > value) {
+        matrix.pop();
+        matrix[matrix.length - 1].pop();
+      }
+
+      // Resize interaction parameters
+      delete_interaction_parameters();
+      populate_interaction_parameters();
+    }
+    // -- INCREASING COLOUR COUNT
+    else {
+      // Resize pColours
+      while (pColours.length < value) {
+        pColours.push(palettes[palette_num][pColours.length]);
+      }
+
+      // Resize matrix
+      while (matrix.length < value) {
+        const row = [];
+        for (let i = 0; i < value; i++) {
+          if (i < matrix.length) {
+            matrix[i].push(new Rule(pColours[i], pColours[matrix.length], Math.random() * 2 - 1));
+          }
+          row.push(new Rule(pColours[matrix.length], pColours[i], Math.random() * 2 - 1));
+        }
+        matrix.push(row);
+      }
+
+      // Resize interaction parameters
+      delete_interaction_parameters();
+      populate_interaction_parameters();
+    }
+    
+    // Updating particle colours
+    for (var i = 0; i < particle_count; i++) {
+      var c = Math.floor((i / particle_count) * pColours.length);
+      particles[i].material.uniforms.pCol.value = pColours[c].colour;
+      particles[i].userData.pColour = pColours[c].name;
+      particles[i].userData.pColourNum = c;
+    }
+
+    colour_count = value;
+    is_paused = pause_state;
+  });
+  
 
   // Interaction parameters
-  let interactionParameters = folderParameters.addFolder("Interactions");
-  for (let c1 = 0; c1 < pColours.length; c1++) {
-    for (let c2 = 0; c2 < pColours.length + 1; c2++) {
-      if (c1 <= pColours.length - 1 && c2 < pColours.length) {
-
+  let interactionParameters = gui.addFolder("Interactions");
+  function populate_interaction_parameters() {
+    for (let c1 = 0; c1 < pColours.length; c1++) {
+      for (let c2 = 0; c2 < pColours.length; c2++) {
         var rule = matrix[c1][c2];
-        if (rule.colourA != "--") {
-          const para_name = pColours[c1].name + " X " + pColours[c2].name;
-          interactionParameters.add(rule, "force", -1.0, 1.0, 0.1).name(para_name).onChange(value => { rule.force = value; }).listen();
-        }
+        const para_name = pColours[c1].name + " X " + pColours[c2].name;
+        interactionParameters.add(rule, "force", -1.0, 1.0, 0.1).name(para_name).onChange(value => { rule.force = value; });//.listen();
+      }
     }
+  }
+  function delete_interaction_parameters() {
+    while (interactionParameters.__controllers.length > 0) {
+      interactionParameters.__controllers[interactionParameters.__controllers.length - 1].remove();
     }
   }
 
+  populate_interaction_parameters();
+  
+
+  // Shader parameters
+  let shaderParameters = gui.addFolder("Shaders");
+  shaderParameters.add(simulation_mat, "wireframe").name("Sim Wireframe").onChange(value => { simulation_mat.wireframe = value; });
+  shaderParameters.add(myStruct, "shader_toggle").name("Cell-Finder").onChange(value => {
+    shader_enabled = value;
+    for (var i = 0; i < particle_count; i++) {
+      particles[i].material.uniforms.neighbour_count.value = 0.0;
+    }
+  });
+  shaderParameters.add(myStruct, "cell_size", 50, 600, 50).name("Cell-Finder Size").onChange(value => { cell_finder_size = value; });
+  shaderParameters.add(myStruct, "palette", 0, 3, 1).name("Colour Palette").onChange(value => {
+    palette_num = value;
+    //pColours = palettes[palette_num];
+    for (let i = 0; i < colour_count; i++) {
+      pColours[i] = palettes[palette_num][i];
+    }
+    for (var i = 0; i < particle_count; i++) {
+      var c = Math.floor((i / particle_count) * pColours.length);
+      particles[i].material.uniforms.pCol.value = pColours[c].colour;
+      particles[i].userData.pColour = pColours[c].name;
+      particles[i].userData.pColourNum = c;
+    }
+    renderer.setClearColor(backgrounds[palette_num]);
+
+    delete_interaction_parameters();
+    populate_interaction_parameters();
+    
+    gui.updateDisplay();
+  });
+
+
+  
+
+  // ---------------------------- ------- ---------------------------- //
+  // ---------------------------- PRESETS ---------------------------- //
+  // ---------------------------- ------- ---------------------------- //
+
   // Preset Buttons
   let presetButtons = gui.addFolder("Presets");
-  var randomise = { Randomise:function(){
+  // randomise particle positions
+  var randomisePositions = { RandomisePositions:function(){
+    for (let i = 0; i < particle_count; i++) {
+      particles[i].position.x = Math.random() * simulation_radius.x;
+      particles[i].position.y = Math.random() * simulation_radius.y;
+      particles[i].position.z = Math.random() * simulation_radius.z;
+    }
+  }};
+  // RandomiseAll randomises all interaction values
+  var randomiseAll = { RandomiseAll:function(){
     for (let i = 0; i < pColours.length; i++) {
       for (let j = 0; j < pColours.length; j++) {
         matrix[i][j].force = Math.random() * 2 - 1;
@@ -385,6 +701,22 @@
     }
     gui.updateDisplay();
   }};
+  // Randomise randomises all interaction values EXCEPT same colour interactions that are kept >= 0
+  var randomise = { Randomise:function(){
+    for (let i = 0; i < pColours.length; i++) {
+      for (let j = 0; j < pColours.length; j++) {
+        if (i == j) {
+          matrix[i][j].force = Math.random();
+        }
+        else {
+          matrix[i][j].force = Math.random() * 2 - 1;
+        }
+        
+      }
+    }
+    gui.updateDisplay();
+  }};
+  // Blank resets all interaction values to 0
   var blankPreset = { BlankPreset:function(){
     for (let i = 0; i < pColours.length; i++) {
       for (let j = 0; j < pColours.length; j++) {
@@ -410,6 +742,7 @@
     matrix[3][1].force = 0.40;
     matrix[3][2].force = 0.14;
     matrix[3][3].force = -0.25;
+    gui.updateDisplay();
   }};
   var preset2 = { Preset2:function(){
     matrix[0][0].force = 0.5;
@@ -428,6 +761,7 @@
     matrix[3][1].force = 0;
     matrix[3][2].force = 0;
     matrix[3][3].force = 0.5;
+    gui.updateDisplay();
   }};
   var preset3 = { Preset3:function(){
     matrix[0][0].force = 0.3;
@@ -446,6 +780,7 @@
     matrix[3][1].force = -0.2;
     matrix[3][2].force = -0.6;
     matrix[3][3].force = 0.2;
+    gui.updateDisplay();
   }};
   var preset4 = { Preset4:function(){
     matrix[0][0].force = 0.5;
@@ -464,9 +799,12 @@
     matrix[3][1].force = 0.7;
     matrix[3][2].force = -0.6;
     matrix[3][3].force = 0.3;
+    gui.updateDisplay();
   }};
 
+  presetButtons.add(randomisePositions,'RandomisePositions');
   presetButtons.add(blankPreset,'BlankPreset');
+  presetButtons.add(randomiseAll,'RandomiseAll');
   presetButtons.add(randomise,'Randomise');
   presetButtons.add(preset1,'Preset1');
   presetButtons.add(preset2,'Preset2');
