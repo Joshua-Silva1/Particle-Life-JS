@@ -20,17 +20,18 @@
     				margin: 0px;
     				overflow: hidden;
     			}
-    			#info {
+    			#step_counter {
     				position: absolute;
-    				top: 10px;
+    				top: 9px;
     				width: 100%;
     				text-align: center;
     			}
     </style>
 
-    <div id="info">
-      <p>This is the first example using threeJS<br>
-      left button to rotate the scene, scroll to zoom in/out</p>
+    <div id="step_counter">
+      <p>Step: 0 <br>
+        Particles: 0
+      </p>
     </div>
 
 		<script type="importmap">
@@ -81,12 +82,13 @@
 
     // PALETTES
     const backgrounds = [ new THREE.Color("#0f0f0f"), new THREE.Color("#f0f6e8"), new THREE.Color("#2f2442"),
-                          new THREE.Color("#95d9bc")
+                          new THREE.Color("#95d9bc"), new THREE.Color("#e6ceac"), new THREE.Color("#130208"),
+                          new THREE.Color("#a597a1"), new THREE.Color("#000924")
     ];
     // BASE
     const palette1 = [
-      new Colour(new THREE.Color(1,1,0), 'Yellow'), new Colour(new THREE.Color(1,0,0), 'Red'), new Colour(new THREE.Color(0,0,1), 'Blue'),
-      new Colour(new THREE.Color(0,1,0), 'Green'), new Colour(new THREE.Color(0.3,0,1), 'Purple'), new Colour(new THREE.Color(1,0.5,0), 'Orange')];
+      new Colour(new THREE.Color(1,0,0), 'Red'), new Colour(new THREE.Color(0,0,1), 'Blue'), new Colour(new THREE.Color(0,1,0), 'Green'),
+      new Colour(new THREE.Color(1,1,0), 'Yellow'), new Colour(new THREE.Color(0.3,0,1), 'Purple'), new Colour(new THREE.Color(1,0.5,0), 'Orange')];
     
     // PASTELS https://lospec.com/palette-list/fairydust-8
     const palette2 = [
@@ -101,8 +103,23 @@
     const palette4 = [
       new Colour(new THREE.Color("#6bad92"), 'Green1'), new Colour(new THREE.Color("#377a5d"), 'Green2'), new Colour(new THREE.Color("#2b5744"), 'Green3'),
       new Colour(new THREE.Color("#263d32"), 'Green4'), new Colour(new THREE.Color("#1b2621"), 'Green5'), new Colour(new THREE.Color("#131a17"), 'Green6')];
-    
-    const palettes = [palette1, palette2, palette3, palette4];
+    // Parchment https://lospec.com/palette-list/justparchment8 
+    const palette5 = [
+      new Colour(new THREE.Color("#292418"), 'Paper1'), new Colour(new THREE.Color("#bda583"), 'Paper2'), new Colour(new THREE.Color("#a48d6a"), 'Paper3'),
+      new Colour(new THREE.Color("#8b7d62"), 'Paper4'), new Colour(new THREE.Color("#73654a"), 'Paper5'), new Colour(new THREE.Color("#524839"), 'Paper6')];
+    // Rose https://lospec.com/palette-list/midnight-ablaze
+    const palette6 = [
+      new Colour(new THREE.Color("#d53c6a"), 'Rose2'), new Colour(new THREE.Color("#460e2b"), 'Rose4'), new Colour(new THREE.Color("#1f0510"), 'Rose6'),
+      new Colour(new THREE.Color("#ff8274"), 'Rose1'), new Colour(new THREE.Color("#7c183c"), 'Rose3'), new Colour(new THREE.Color("#31051e"), 'Rose5')];
+    // Clouds https://lospec.com/palette-list/cl8uds
+    const palette7 = [
+      new Colour(new THREE.Color("#fcb08c"), 'Orange1'), new Colour(new THREE.Color("#a5b7d4"), 'Blue1'), new Colour(new THREE.Color("#d6938a"), 'Orange3'),
+      new Colour(new THREE.Color("#9aabc9"), 'Blue2'), new Colour(new THREE.Color("#ef9d7f"), 'Orange2'), new Colour(new THREE.Color("#8fa0bf"), 'Blue3')];
+    // Aquaverse https://lospec.com/palette-list/aquaverse
+    const palette8 = [
+      new Colour(new THREE.Color("#093659"), 'Blue1'), new Colour(new THREE.Color("#46cfb3"), 'Aqua1'), new Colour(new THREE.Color("#145d87"), 'Blue2'),
+      new Colour(new THREE.Color("#73f0c6"), 'Aqua2'), new Colour(new THREE.Color("#228399"), 'Blue3'), new Colour(new THREE.Color("#abffd1"), 'Aqua3')];
+    const palettes = [palette1, palette2, palette3, palette4, palette5, palette6, palette7, palette8];
     
     // Setting up Colours
     var pColours = [];
@@ -123,7 +140,7 @@
     // Shader params
     var shader_enabled = false; // cell-finder shader -> grays out lonely particles, vibrant colours for cells
     var cell_finder_size = 200;
-    var palette_num = 0; // 0-3
+    var palette_num = 0; // 0-7
 
     //pColours = palettes[palette_num];
     for (let i = 0; i < colour_count; i++) {
@@ -145,6 +162,7 @@
     var particles = [];
     var mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
     
+    document.getElementById('step_counter').textContent = "Particles: " + particle_count + " Step: " + current_step;
     // ---------------------------- ---------------- ---------------------------- //
     // ---------------------------- ---------------- ---------------------------- //
 
@@ -206,6 +224,9 @@
     // ---------------------------- ---------------- ---------------------------- //
     // ---------------------------- ---------------- ---------------------------- //
 
+    // Particle Mesh
+    var geometry_icosahedron = new THREE.IcosahedronGeometry(1,  0);
+
     function CreateScene()
     {
       for (var i = 0; i < particle_count; i++) {
@@ -214,7 +235,7 @@
 
         //create the material of the cube (basic material)
         //var material_cube = new THREE.MeshBasicMaterial();
-        var material_cube = new THREE.ShaderMaterial( {
+        var material_particle = new THREE.ShaderMaterial( {
           vertexShader: document.getElementById('vertex_shader_simple').textContent,
           fragmentShader: document.getElementById('fragment_shader_simple').textContent,
           uniforms: {
@@ -222,10 +243,10 @@
             neighbour_count: {value: 0}
           },
         });
-        material_cube.transparent = true;
+        material_particle.transparent = true;
 
         //then set the renderer to wireframe
-        material_cube.wireframe = is_wire_framed;
+        material_particle.wireframe = is_wire_framed;
 
         //all the transformation are 4x4 matrices as
         var rot2 = new THREE.Matrix4();
@@ -237,32 +258,32 @@
         combined.multiply(tra);
         combined.multiply(sca);
 
-        var cube = new THREE.Mesh(geometry_cube,material_cube);
+        var particle = new THREE.Mesh(geometry_icosahedron,material_particle);
 
         // Setting colours
-        material_cube.color =  pColours[c].colour;
-        cube.userData.pColour = pColours[c].name;
-        cube.userData.pColourNum = c;
+        material_particle.color =  pColours[c].colour;
+        particle.userData.pColour = pColours[c].name;
+        particle.userData.pColourNum = c;
 
-        cube.applyMatrix4(combined);
+        particle.applyMatrix4(combined);
 
-        cube.position.x = mid_point.x + (Math.random() - 0.5) * simulation_radius.x;
-        cube.position.y = mid_point.y + (Math.random() - 0.5) * simulation_radius.y;
-        cube.position.z = mid_point.z + (Math.random() - 0.5) * simulation_radius.z;
+        particle.position.x = mid_point.x + (Math.random() - 0.5) * simulation_radius.x;
+        particle.position.y = mid_point.y + (Math.random() - 0.5) * simulation_radius.y;
+        particle.position.z = mid_point.z + (Math.random() - 0.5) * simulation_radius.z;
         
-        cube.userData.vx = 0;//Math.random();
-        cube.userData.vy = 0;//Math.random();
-        cube.userData.vz = 0;//Math.random();
+        particle.userData.vx = 0;//Math.random();
+        particle.userData.vy = 0;//Math.random();
+        particle.userData.vz = 0;//Math.random();
 
         if (optimisation_toggle) {
-          cube.userData.neighbours = [];
+          particle.userData.neighbours = [];
         }
 
-        cube.scale.x = particles_scale;
-        cube.scale.y = particles_scale;
-        cube.scale.z = particles_scale;
+        particle.scale.x = particles_scale;
+        particle.scale.y = particles_scale;
+        particle.scale.z = particles_scale;
 
-        particles.push(cube);
+        particles.push(particle);
         scene.add(particles[i]);
       }
     }
@@ -323,6 +344,7 @@
       simulation_step();
     }
     current_step++;
+    document.getElementById('step_counter').textContent = "Particles: " + particle_count + " Step: " + current_step;
   }
 
   function simulation_step () {
@@ -659,7 +681,7 @@
     }
   });
   shaderParameters.add(myStruct, "cell_size", 50, 600, 50).name("Cell-Finder Size").onChange(value => { cell_finder_size = value; });
-  shaderParameters.add(myStruct, "palette", 0, 3, 1).name("Colour Palette").onChange(value => {
+  shaderParameters.add(myStruct, "palette", 0, 7, 1).name("Colour Palette").onChange(value => {
     palette_num = value;
     //pColours = palettes[palette_num];
     for (let i = 0; i < colour_count; i++) {
@@ -729,91 +751,11 @@
     }
     gui.updateDisplay();
   }};
-  var preset1 = { Preset1:function(){
-    matrix[0][0].force = 0.17;
-    matrix[0][1].force = 0.17;
-    matrix[0][2].force = 0.14;
-    matrix[0][3].force = 0.14;
-    matrix[1][0].force = 0.20;
-    matrix[1][1].force = 0.34;
-    matrix[1][2].force = -0.24;
-    matrix[1][3].force = -0.20;
-    matrix[2][0].force = 0.50;
-    matrix[2][1].force = 0.50;
-    matrix[2][2].force = 0.50;
-    matrix[2][3].force = 0.50;
-    matrix[3][0].force = 0.20;
-    matrix[3][1].force = 0.40;
-    matrix[3][2].force = 0.14;
-    matrix[3][3].force = -0.25;
-    gui.updateDisplay();
-  }};
-  var preset2 = { Preset2:function(){
-    matrix[0][0].force = 0.5;
-    matrix[0][1].force = 1;
-    matrix[0][2].force = 0;
-    matrix[0][3].force = 0;
-    matrix[1][0].force = 0;
-    matrix[1][1].force = 0.5;
-    matrix[1][2].force = 1;
-    matrix[1][3].force = 0;
-    matrix[2][0].force = 0;
-    matrix[2][1].force = 0;
-    matrix[2][2].force = 0.5;
-    matrix[2][3].force = 1;
-    matrix[3][0].force = 1;
-    matrix[3][1].force = 0;
-    matrix[3][2].force = 0;
-    matrix[3][3].force = 0.5;
-    gui.updateDisplay();
-  }};
-  var preset3 = { Preset3:function(){
-    matrix[0][0].force = 0.3;
-    matrix[0][1].force = 0.2;
-    matrix[0][2].force = 0.3;
-    matrix[0][3].force = 0.8;
-    matrix[1][0].force = -0.6;
-    matrix[1][1].force = 0.2;
-    matrix[1][2].force = 0.6;
-    matrix[1][3].force = -0.1;
-    matrix[2][0].force = 0;
-    matrix[2][1].force = 0.2;
-    matrix[2][2].force = 0.1;
-    matrix[2][3].force = 0.2;
-    matrix[3][0].force = 0.8;
-    matrix[3][1].force = -0.2;
-    matrix[3][2].force = -0.6;
-    matrix[3][3].force = 0.2;
-    gui.updateDisplay();
-  }};
-  var preset4 = { Preset4:function(){
-    matrix[0][0].force = 0.5;
-    matrix[0][1].force = 0.6;
-    matrix[0][2].force = 0.1;
-    matrix[0][3].force = 0.6;
-    matrix[1][0].force = -0.4;
-    matrix[1][1].force = 0.2;
-    matrix[1][2].force = 0.1;
-    matrix[1][3].force = 0;
-    matrix[2][0].force = 0;
-    matrix[2][1].force = 0.8;
-    matrix[2][2].force = 0.3;
-    matrix[2][3].force = -1;
-    matrix[3][0].force = -0.6;
-    matrix[3][1].force = 0.7;
-    matrix[3][2].force = -0.6;
-    matrix[3][3].force = 0.3;
-    gui.updateDisplay();
-  }};
 
   presetButtons.add(randomisePositions,'RandomisePositions');
   presetButtons.add(blankPreset,'BlankPreset');
   presetButtons.add(randomiseAll,'RandomiseAll');
   presetButtons.add(randomise,'Randomise');
-  presetButtons.add(preset1,'Preset1');
-  presetButtons.add(preset2,'Preset2');
-  presetButtons.add(preset3,'Preset3');
-  presetButtons.add(preset4,'Preset4');
   
 
     </script>
