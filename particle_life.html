@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>Particle Life</title>
+    <title>Particle Life JS JS</title>
   </head>
 
   <style>
@@ -188,7 +188,6 @@
     var geometry_cube = new THREE.BoxGeometry(1,1,1);
     
     //set the camera position
-    //camera.position.set(simulation_radius.x / 2, 100, simulation_radius.z / 2);
     camera.position.x = simulation_radius.x / 2;
     camera.position.y = 100;
     camera.position.z = simulation_radius.z / 2;
@@ -476,11 +475,6 @@
       partA.userData.vx += totalForceX * delta_time;
       partA.userData.vy += totalForceY * delta_time;
       partA.userData.vz += totalForceZ * delta_time;
-
-      //partA.material.uniforms.speed.value = 0.5 + ((totalForceX * delta_time) / partA.userData.vx) / 2;
-      //const v = partA.userData.vx + partA.userData.vy + partA.userData.vz;
-      //partA.material.uniforms.speed.value = Math.min(Math.abs((v / 120) - 1), 0.9);
-      //if (v / 100 > 1.0) { console.log(v); }
       
     }
 
@@ -508,8 +502,6 @@
   {
     
     controls.update();
-
-    
 
     // call the render with the scene and the camera
     renderer.render(scene,camera);
