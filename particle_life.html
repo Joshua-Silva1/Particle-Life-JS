@@ -91,8 +91,8 @@
       new Colour(new THREE.Color(1,1,0), 'Yellow'), new Colour(new THREE.Color(0.3,0,1), 'Purple'), new Colour(new THREE.Color(1,0.5,0), 'Orange')];
     // PASTELS https://lospec.com/palette-list/fairydust-8
     const palette2 = [
-      new Colour(new THREE.Color("#f0dab1"), 'Yellow'), new Colour(new THREE.Color("#e39aac"), 'Orange'), new Colour(new THREE.Color("#c45d9f"), 'Red'),
-      new Colour(new THREE.Color("#634b7d"), 'Purple'), new Colour(new THREE.Color("#6461c2"), 'Blue'), new Colour(new THREE.Color("#2ba9b4"), 'Green')];
+      new Colour(new THREE.Color("#c45d9f"), 'Red'), new Colour(new THREE.Color("#6461c2"), 'Blue'), new Colour(new THREE.Color("#2ba9b4"), 'Green'),
+      new Colour(new THREE.Color("#f0dab1"), 'Yellow'), new Colour(new THREE.Color("#634b7d"), 'Purple'), new Colour(new THREE.Color("#e39aac"), 'Orange')];
     // PINKS https://lospec.com/palette-list/krea-8
     const palette3 = [
       new Colour(new THREE.Color("#f3c4d8"), 'Pink1'), new Colour(new THREE.Color("#e18dcb"), 'Pink2'), new Colour(new THREE.Color("#c760bc"), 'Pink3'),
@@ -135,6 +135,11 @@
     var simulation_radius = new THREE.Vector3(100, 0, 100);
     var particles_scale = 1.0;
     var colour_count = 4; // 1-6
+
+    // Space Partitioning Grid
+    var grid_size = 2; // divides space by this number
+    var visualise_grid = false;
+
 
     // Shader params
     var shader_enabled = false; // cell-finder shader -> grays out lonely particles, vibrant colours for cells
