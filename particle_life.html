@@ -348,6 +348,10 @@
     }
     current_step++;
     document.getElementById('step_counter').textContent = "Particles: " + particle_count + " Step: " + current_step;
+
+    console.log(current_step);
+    console.log(camera);
+    console.log(controls);
   }
 
   function simulation_step () {
@@ -715,7 +719,7 @@
     }
   }};
   // RandomiseAll randomises all interaction values
-  var randomiseAll = { RandomiseAll:function(){
+  var randomiseAllInteractions = { RandomiseAllInteractions:function(){
     for (let i = 0; i < pColours.length; i++) {
       for (let j = 0; j < pColours.length; j++) {
         matrix[i][j].force = Math.random() * 2 - 1;
@@ -724,7 +728,7 @@
     gui.updateDisplay();
   }};
   // Randomise randomises all interaction values EXCEPT same colour interactions that are kept >= 0
-  var randomise = { Randomise:function(){
+  var randomiseInteractions = { RandomiseInteractions:function(){
     for (let i = 0; i < pColours.length; i++) {
       for (let j = 0; j < pColours.length; j++) {
         if (i == j) {
@@ -739,7 +743,7 @@
     gui.updateDisplay();
   }};
   // Blank resets all interaction values to 0
-  var blankPreset = { BlankPreset:function(){
+  var blankInteractionPreset = { BlankInteractionsPreset:function(){
     for (let i = 0; i < pColours.length; i++) {
       for (let j = 0; j < pColours.length; j++) {
         matrix[i][j].force = 0;
@@ -748,10 +752,10 @@
     gui.updateDisplay();
   }};
 
-  presetButtons.add(randomisePositions,'RandomisePositions');
-  presetButtons.add(blankPreset,'BlankPreset');
-  presetButtons.add(randomiseAll,'RandomiseAll');
-  presetButtons.add(randomise,'Randomise');
+  presetButtons.add(randomisePositions,'RandomisePositions').name("Randomise Positions");
+  presetButtons.add(blankInteractionPreset,'BlankInteractionsPreset').name("Blank Interactions");
+  presetButtons.add(randomiseAllInteractions,'RandomiseAllInteractions').name("Randomise All Interactions");
+  presetButtons.add(randomiseInteractions,'RandomiseInteractions').name("Randomise Unlike Interactions");
   
 
     </script>
