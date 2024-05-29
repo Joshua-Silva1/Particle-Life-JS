@@ -44,7 +44,10 @@
 		</script>
 
     <script type="x-shader/x-vertex" id="vertex_shader_simple">
+      varying vec2 vUv;
+      
       void main() {
+        vUv = uv;
         vec4 ViewPosition = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * ViewPosition;
       }
@@ -53,10 +56,14 @@
     <script type="x-shader/x-fragment" id="fragment_shader_simple">
       uniform vec3 pCol;
       uniform float neighbour_count;
+      uniform sampler2D tTexture;
+
+      varying vec2 vUv;
 
       void main() {
         vec3 c = vec3(1, 1, 1) - pCol;
-        gl_FragColor = vec4(pCol + c * neighbour_count, 1.0);
+        //gl_FragColor = vec4(pCol + c * neighbour_count, 1.0);
+        gl_FragColor = texture2D(tTexture, vUv) + vec4(pCol + c * neighbour_count, 1.0);
       }
     </script>
 		
@@ -66,6 +73,8 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from './build/controls/OrbitControls.js';
   import { GUI } from './build/gui/dat.gui.module.js';
+  import { TrailRenderer } from './build/TrailRenderer.js';
+  import { TextureLoader } from './node_modules/three/src/loaders/TextureLoader.js';
   
     
     // EXAMPLE - GREEN ATTRACTED TO RED: rules.push(new Rule('Green', 'Red', 1.0));
@@ -137,14 +146,18 @@
     var colour_count = 4; // 1-6
 
     // Space Partitioning Grid
-    var grid_size = 2; // divides space by this number
+    var grid_scale = Math.min(Math.max(Math.floor(simulation_radius.x / (2 * max_force_dist)), 3), 6); // divides space by this number
     var visualise_grid = false;
+    var grid = [];
+    const partitioning_toggle = false;
 
 
     // Shader params
     var shader_enabled = false; // cell-finder shader -> grays out lonely particles, vibrant colours for cells
     var cell_finder_size = 200;
     var palette_num = 0; // 0-7
+    var has_trails = false;
+    var trail_length = 20;
 
     //pColours = palettes[palette_num];
     for (let i = 0; i < colour_count; i++) {
@@ -152,12 +165,11 @@
     }
 
     const steps_till_update = 10;
-    const optimisation_toggle = true;
     var current_step = 0;
 
     // Simulation fixed properties
     const friction_half_life = 0.040;
-    const particle_count = 1800; // 1000 - 2000
+    const particle_count = 1700; // 1000 - 2000
     var friction_factor = Math.pow(0.5, delta_time/friction_half_life);
     var is_wire_framed = false;
 
@@ -228,7 +240,20 @@
     // ---------------------------- ---------------- ---------------------------- //
 
     // Particle Mesh
-    var geometry_icosahedron = new THREE.IcosahedronGeometry(1,  0);
+    var geometry_icosahedron = new THREE.IcosahedronGeometry(1, 0);
+    const textureLoader = new THREE.TextureLoader();
+
+    //tTexture = textureLoader.load('./triangle_texture.jpeg');
+
+
+    // Trail setup
+    const trailHeadGeometry = [];
+    trailHeadGeometry.push( 
+      new THREE.Vector3( -1.5, 0.0, 0.0 ), 
+      new THREE.Vector3( 0.0, 0.0, 0.0 ), 
+      new THREE.Vector3( 1.5, 0.0, 0.0 ) 
+    );
+    
 
     function CreateScene()
     {
@@ -243,9 +268,14 @@
           fragmentShader: document.getElementById('fragment_shader_simple').textContent,
           uniforms: {
             pCol: {value: pColours[c].colour},
-            neighbour_count: {value: 0}
+            neighbour_count: {value: 0},
+            //tTexture: { type: 't', value: textureLoader.load('./textures/triangle_texture.jpeg')}
+            //tTexture: { type: 't', value: textureLoader.load('./textures/swirl_pattern.jpeg')}
+            //tTexture: { type: 't', value: textureLoader.load('./textures/drops_texture.jpeg')}
+            //tTexture: { type: 't', value: textureLoader.load('./textures/marble_texture.jpeg')}
           },
         });
+
         material_particle.transparent = true;
 
         //then set the renderer to wireframe
@@ -278,13 +308,41 @@
         particle.userData.vy = 0;//Math.random();
         particle.userData.vz = 0;//Math.random();
 
-        if (optimisation_toggle) {
+        if (!partitioning_toggle) {
           particle.userData.neighbours = [];
         }
 
         particle.scale.x = particles_scale;
         particle.scale.y = particles_scale;
         particle.scale.z = particles_scale;
+
+        // Trails
+        // create the trail renderer object
+        const trail = new TrailRenderer( scene, false );
+
+        // set how often a new trail node will be added and existing nodes will be updated
+        trail.setAdvanceFrequency(100);
+
+        // create material for the trail renderer
+        const trailMaterial = TrailRenderer.createBaseMaterial();	
+        
+        trailMaterial.uniforms.headColor.value = new THREE.Vector4(pColours[c].colour.r, pColours[c].colour.g, pColours[c].colour.b, 1.0);
+        trailMaterial.uniforms.tailColor.value = new THREE.Vector4(pColours[c].colour.r, pColours[c].colour.g, pColours[c].colour.b, 0.1);
+
+        // specify length of trail
+        const trailLength = trail_length;
+
+        // initialize the trail
+        trail.initialize( trailMaterial, trailLength, false, 0, trailHeadGeometry, particle );
+
+        // activate the trail
+        if (has_trails) {
+          trail.activate();
+        }
+        
+
+        particle.userData.trail = trail;
+        // ------------- //
 
         particles.push(particle);
         scene.add(particles[i]);
@@ -294,7 +352,8 @@
     
  
   CreateScene();
-  if (optimisation_toggle) { update_neighbours; }
+  if (!partitioning_toggle) { update_neighbours; }
+  else { generate_grid(); }
   
   
   //////////////
@@ -334,89 +393,6 @@
     return rows;
   }
 
-  
-  
-  var Animate = function() {
-    if (optimisation_toggle) {
-      if (current_step % steps_till_update == 0) {
-        update_neighbours();
-      }
-      optimised_simulation_step();
-    }
-    else {
-      simulation_step();
-    }
-    current_step++;
-    document.getElementById('step_counter').textContent = "Particles: " + particle_count + " Step: " + current_step;
-
-    console.log(current_step);
-    console.log(camera);
-    console.log(controls);
-  }
-
-  function simulation_step () {
-    // Update velocities
-    for (var i = 0; i < particle_count; i++) {
-      let totalForceX = 0;
-      let totalForceY = 0;
-      let totalForceZ = 0;
-
-      const partA = particles[i];
-      for (var j = 0; j < particle_count; j++) {
-        if (j === i) continue;
-        const partB = particles[j];
-
-        // Calculate distances
-        const distX = partB.position.x - partA.position.x;
-        const distY = partB.position.y - partA.position.y;
-        const distZ = partB.position.z - partA.position.z;
-        const dist = Math.sqrt(distX * distX + distY * distY + distZ * distZ);
-
-        // Check particle pair is within min and max distances
-        if (dist > 0 && dist < max_force_dist) {
-          const force = get_force(dist / max_force_dist, matrix[partA.userData.pColourNum][partB.userData.pColourNum].force);
-          totalForceX += distX / dist * force;
-          totalForceY += distY / dist * force;
-          totalForceZ += distZ / dist * force;
-        }
-
-      }
-
-      // Scale by max
-      totalForceX *= max_force_dist * force_factor;
-      totalForceY *= max_force_dist * force_factor;
-      totalForceZ *= max_force_dist * force_factor;
-
-      // Apply Friction to velocity
-      partA.userData.vx *= friction_factor;
-      partA.userData.vy *= friction_factor;
-      partA.userData.vz *= friction_factor;
-
-      // Add force to particle velocity
-      partA.userData.vx += totalForceX * delta_time;
-      partA.userData.vy += totalForceY * delta_time;
-      partA.userData.vz += totalForceZ * delta_time;
-    }
-
-    
-    for (var i = 0; i < particle_count; i++) {
-      // Update positions
-      particles[i].position.x += particles[i].userData.vx * delta_time;
-      particles[i].position.y += particles[i].userData.vy * delta_time;
-      particles[i].position.z += particles[i].userData.vz * delta_time;
-
-      // Screen wrapping
-      if (particles[i].position.x > simulation_radius.x) { particles[i].position.x = 1; }
-      else if (particles[i].position.x < 0) { particles[i].position.x = simulation_radius.x -1; }
-
-      if (particles[i].position.y > simulation_radius.y) { particles[i].position.y = 1; }
-      else if (particles[i].position.y < 0) { particles[i].position.y = simulation_radius.y -1; }
-
-      if (particles[i].position.z > simulation_radius.z) { particles[i].position.z = 1; }
-      else if (particles[i].position.z < 0) { particles[i].position.z = simulation_radius.z -1; }
-    }
-  }
-
   function update_neighbours() {
     for (var i = 0; i < particle_count; i++) {
       const partA = particles[i];
@@ -443,7 +419,7 @@
     }
   }
 
-  function optimised_simulation_step () {
+  function simulation_step () {
     // Update velocities
     for (var i = 0; i < particle_count; i++) {
       let totalForceX = 0;
@@ -486,7 +462,6 @@
       partA.userData.vz += totalForceZ * delta_time;
       
     }
-
     
     for (var i = 0; i < particle_count; i++) {
       // Update positions
@@ -495,15 +470,181 @@
       particles[i].position.z += particles[i].userData.vz * delta_time;
 
       // Screen wrapping
-      if (particles[i].position.x > simulation_radius.x) { particles[i].position.x = 1; }
-      else if (particles[i].position.x < 0) { particles[i].position.x = simulation_radius.x -1; }
+      if (particles[i].position.x > simulation_radius.x) { particles[i].position.x = 1; particles[i].userData.trail.reset(); }
+      else if (particles[i].position.x < 0) { particles[i].position.x = simulation_radius.x -1; particles[i].userData.trail.reset(); }
 
-      if (particles[i].position.y > simulation_radius.y) { particles[i].position.y = 1; }
-      else if (particles[i].position.y < 0) { particles[i].position.y = simulation_radius.y -1; }
+      if (particles[i].position.y > simulation_radius.y) { particles[i].position.y = 1; particles[i].userData.trail.reset(); }
+      else if (particles[i].position.y < 0) { particles[i].position.y = simulation_radius.y -1; particles[i].userData.trail.reset(); }
 
-      if (particles[i].position.z > simulation_radius.z) { particles[i].position.z = 1; }
-      else if (particles[i].position.z < 0) { particles[i].position.z = simulation_radius.z -1; }
+      if (particles[i].position.z > simulation_radius.z) { particles[i].position.z = 1; particles[i].userData.trail.reset(); }
+      else if (particles[i].position.z < 0) { particles[i].position.z = simulation_radius.z -1; particles[i].userData.trail.reset(); }
+
+      // Update trails
+      particles[i].userData.trail.update();
     }
+  }
+
+  function partitioned_step() {
+    update_partitions();
+
+    // loop through each particle
+    for (var i = 0; i < particle_count; i++) {
+      let totalForceX = 0;
+      let totalForceY = 0;
+      let totalForceZ = 0;
+
+      const partA = particles[i];
+
+      // get partition
+      const grid_size = simulation_radius.x / grid_scale;
+      const partitionRow = Math.floor(particles[i].position.z / grid_size);
+      const partitionColumn = Math.floor(particles[i].position.x / grid_size);
+      const partition = partitions[partitionRow * grid_scale  + partitionColumn];
+
+      // loop over all particles in same partition
+      for (var j = 0; j < partition.length; j++) {
+        const partB = partition[j];
+        if (partA === partB) continue;
+
+        // Calculate distances
+        const distX = partB.position.x - partA.position.x;
+        const distY = partB.position.y - partA.position.y;
+        const distZ = partB.position.z - partA.position.z;
+        const dist = Math.sqrt(distX * distX + distY * distY + distZ * distZ);
+
+        // Check particle pair is within min and max distances
+        if (dist > 0 && dist < max_force_dist) {
+          const force = get_force(dist / max_force_dist, matrix[partA.userData.pColourNum][partB.userData.pColourNum].force);
+          totalForceX += distX / dist * force;
+          totalForceY += distY / dist * force;
+          totalForceZ += distZ / dist * force;
+        }
+      }
+
+      // Scale by max
+      totalForceX *= max_force_dist * force_factor;
+      totalForceY *= max_force_dist * force_factor;
+      totalForceZ *= max_force_dist * force_factor;
+
+      // Apply Friction to velocity
+      partA.userData.vx *= friction_factor;
+      partA.userData.vy *= friction_factor;
+      partA.userData.vz *= friction_factor;
+
+      // Add force to particle velocity
+      partA.userData.vx += totalForceX * delta_time;
+      partA.userData.vy += totalForceY * delta_time;
+      partA.userData.vz += totalForceZ * delta_time;
+    }
+
+    // Finally loop over particles and move them
+    for (var i = 0; i < particle_count; i++) {
+      // Update positions
+      particles[i].position.x += particles[i].userData.vx * delta_time;
+      particles[i].position.y += particles[i].userData.vy * delta_time;
+      particles[i].position.z += particles[i].userData.vz * delta_time;
+
+      // Screen wrapping
+      if (particles[i].position.x > simulation_radius.x) { particles[i].position.x = 1; particles[i].userData.trail.reset(); }
+      else if (particles[i].position.x < 0) { particles[i].position.x = simulation_radius.x -1; particles[i].userData.trail.reset(); }
+
+      if (particles[i].position.y > simulation_radius.y) { particles[i].position.y = 1; particles[i].userData.trail.reset(); }
+      else if (particles[i].position.y < 0) { particles[i].position.y = simulation_radius.y -1; particles[i].userData.trail.reset(); }
+
+      if (particles[i].position.z > simulation_radius.z) { particles[i].position.z = 1; particles[i].userData.trail.reset(); }
+      else if (particles[i].position.z < 0) { particles[i].position.z = simulation_radius.z -1; particles[i].userData.trail.reset(); }
+
+      // Update trails
+      particles[i].userData.trail.update();
+    }
+  }
+
+  var partitions = [];
+  function update_partitions() {
+    partitions = [];
+    for (var i = 0; i < grid.length; i++) {
+      const partition = [];
+      partitions.push(partition);
+    }
+
+    const grid_size = simulation_radius.x / grid_scale;
+    // Put each particle into a partition based on position
+    for (var i = 0; i < particle_count; i++) {
+      const partitionRow = Math.floor(particles[i].position.z / grid_size);
+      const partitionColumn = Math.floor(particles[i].position.x / grid_size);
+      
+      partitions[partitionRow * grid_scale + partitionColumn].push(particles[i]);
+    }
+  }
+
+  function delete_grid() {
+    while (grid.length > 0) {
+      scene.remove(grid.pop());
+    }
+  }
+
+  function generate_grid() {
+    // Empty existing grid
+    delete_grid()
+
+    // Side length of each grid segment
+    const grid_size = simulation_radius.x / grid_scale;
+    //const grid_colour_1 = new THREE.Color(1, 1, 1);
+
+    if (visualise_grid) {
+      const grid_cube_geometry = new THREE.BoxGeometry(grid_size, simulation_radius.y ,grid_size);
+      // Grid on the x
+      for (var i = 0; i < grid_scale; i++) {
+        // Grid on the z
+        for (var j = 0; j < grid_scale; j++) {
+          
+          // // 3D GRID
+          // if (simulation_radius.z > grid_size) {
+          //   // Grid on the y
+          //   for (var w = 0; w < grid_scale; w++) {
+
+          //   }
+          // }
+          
+          const grid_mat = new THREE.MeshBasicMaterial();
+    
+          grid_mat.transparent = true;
+          grid_mat.opacity = 0.25;
+          grid_mat.wireframe = false;
+          //grid_mat.color = backgrounds[palette_num];
+
+          const c = backgrounds[palette_num];
+          if (i % 2 == 1 ^ j % 2 == 0) { grid_mat.color = c; }
+          else { grid_mat.color = new THREE.Color(1 - c.r, 1 - c.g, 1 - c.b); }
+
+          const new_grid_cube = new THREE.Mesh(grid_cube_geometry, grid_mat);
+          
+          // Setting positions
+          new_grid_cube.position.x = (grid_size / 2) + (grid_size) * i;
+          new_grid_cube.position.y = simulation_radius.y / 2;
+          new_grid_cube.position.z = (grid_size / 2) + (grid_size) * j;
+          
+          grid.push(new_grid_cube);
+          scene.add(new_grid_cube);
+
+          
+        }
+      }
+    }
+  }
+
+  var Animate = function() {
+    if (!partitioning_toggle) {
+      if (current_step % steps_till_update == 0) {
+        update_neighbours();
+      }
+      simulation_step();
+    }
+    else {
+      partitioned_step();
+    }
+    current_step++;
+    document.getElementById('step_counter').textContent = "Particles: " + particle_count + " Step: " + current_step;
   }
 
   // final update loop
@@ -554,13 +695,20 @@
     shader_toggle: shader_enabled,
     cell_size: cell_finder_size,
     palette: palette_num,
-    col_count: colour_count
+    col_count: colour_count,
+    is_gridded: visualise_grid,
+    trails: has_trails,
+    trail_l: trail_length
   };
 
   let folderParameters = gui.addFolder("Parameters");
 
   folderParameters.add(myStruct, "pause").name("Pause").onChange(value => { is_paused = value; });
-  folderParameters.add(myStruct, "max_dist", 2, 50, 1).name("Max Force Dist").onChange(value => { max_force_dist = value; });
+  folderParameters.add(myStruct, "max_dist", 2, 50, 1).name("Max Force Dist").onChange(value => {
+    max_force_dist = value;
+    grid_scale = Math.min(Math.max(Math.floor(simulation_radius.x / (2 * max_force_dist)), 3), 6);
+  // adjust grid
+  if (visualise_grid) { generate_grid();}});
   folderParameters.add(myStruct, "min_dist", 0.05, 0.8, 0.05).name("Min Force Dist").onChange(value => { inflection_distance = value; });
   folderParameters.add(myStruct, "for_fac", 1, 30, 1).name("Force Scale").onChange(value => { force_factor = value; });
   folderParameters.add(myStruct, "dt", 0.0001, 0.04, 0.0001).name("Sim Speed").onChange(value => { delta_time = value; friction_factor = Math.pow(0.5, delta_time / friction_half_life); });
@@ -574,6 +722,9 @@
     // update camera
     mid_point = new THREE.Vector3(simulation_radius.x / 2, simulation_radius.y / 2, simulation_radius.z / 2);
     controls.target = mid_point;
+
+    // adjust grid
+    if (visualise_grid) { generate_grid(); }
   });
   folderParameters.add(simulation_radius, "y", 0, 300, 5).name("Sim Depth").onChange(value => {
     simulation_radius.y = value;
@@ -584,6 +735,9 @@
     for (var i = 0; i < particle_count; i++) {
       particles[i].position.y = Math.random() * value;
     }
+
+    // adjust grid
+    if (visualise_grid) { generate_grid(); }
   });
   folderParameters.add(myStruct, "p_scale", 0.1, 1.5, 0.1).name("Particle Size").onChange(value => {
     particles_scale = value;
@@ -674,6 +828,11 @@
   // Shader parameters
   let shaderParameters = gui.addFolder("Shaders");
   shaderParameters.add(simulation_mat, "wireframe").name("Sim Wireframe").onChange(value => { simulation_mat.wireframe = value; });
+  shaderParameters.add(myStruct, "is_gridded").name("Visualise Grid").onChange(value => {
+    visualise_grid = value;
+    if (visualise_grid) { generate_grid(); }
+    else { delete_grid(); }
+  });
   shaderParameters.add(myStruct, "shader_toggle").name("Cell-Finder").onChange(value => {
     shader_enabled = value;
     for (var i = 0; i < particle_count; i++) {
@@ -692,14 +851,42 @@
       particles[i].material.uniforms.pCol.value = pColours[c].colour;
       particles[i].userData.pColour = pColours[c].name;
       particles[i].userData.pColourNum = c;
+
+      particles[i].userData.trail.material.uniforms.headColor.value = new THREE.Vector4(pColours[c].colour.r, pColours[c].colour.g, pColours[c].colour.b, 1.0);
+      particles[i].userData.trail.material.uniforms.tailColor.value = new THREE.Vector4(pColours[c].colour.r, pColours[c].colour.g, pColours[c].colour.b, 0.1);
     }
+    
     renderer.setClearColor(backgrounds[palette_num]);
 
     delete_interaction_parameters();
     populate_interaction_parameters();
+
+    // adjust grid
+    if (visualise_grid) { generate_grid(); }
     
     gui.updateDisplay();
   });
+  shaderParameters.add(myStruct, "trails").name("Trails").onChange(value => {
+    if (has_trails && value == false) {
+      for (var i = 0; i < particle_count; i++) {
+        particles[i].userData.trail.deactivate();
+      }
+    }
+    else if (!has_trails && value == true) {
+      for (var i = 0; i < particle_count; i++) {
+        particles[i].userData.trail.activate();
+      }
+    }
+    
+    has_trails = value;
+  });
+  // shaderParameters.add(myStruct, "trail_l", 5, 100, 5).name("Trail Length").onChange(value => {
+  //   trail_length = value;
+  //   for (var i = 0; i < particle_count; i++) {
+  //     particles[i].userData.trail.material.uniforms.maxTrailLength.value = trail_length;
+  //     particles[i].userData.trail.reset();
+  //   }
+  // });
 
 
   
