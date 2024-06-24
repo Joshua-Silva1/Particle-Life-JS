@@ -243,9 +243,6 @@
     var geometry_icosahedron = new THREE.IcosahedronGeometry(1, 0);
     const textureLoader = new THREE.TextureLoader();
 
-    //tTexture = textureLoader.load('./triangle_texture.jpeg');
-
-
     // Trail setup
     const trailHeadGeometry = [];
     trailHeadGeometry.push( 
@@ -261,8 +258,6 @@
         // Grab colour
         var c = Math.floor((i / particle_count) * pColours.length);
 
-        //create the material of the cube (basic material)
-        //var material_cube = new THREE.MeshBasicMaterial();
         var material_particle = new THREE.ShaderMaterial( {
           vertexShader: document.getElementById('vertex_shader_simple').textContent,
           fragmentShader: document.getElementById('fragment_shader_simple').textContent,
@@ -420,13 +415,15 @@
   }
 
   function simulation_step () {
-    // Update velocities
+    // Loop over all particles
     for (var i = 0; i < particle_count; i++) {
+      // Setup force variables
       let totalForceX = 0;
       let totalForceY = 0;
       let totalForceZ = 0;
 
       const partA = particles[i];
+      // Loop over each pair of neighbouring particles
       for (var j = 0; j < partA.userData.neighbours.length; j++) {
         if (j === i) continue;
         const partB = partA.userData.neighbours[j];
