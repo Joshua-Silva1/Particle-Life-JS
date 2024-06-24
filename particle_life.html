@@ -75,6 +75,9 @@
   import { GUI } from './build/gui/dat.gui.module.js';
   import { TrailRenderer } from './build/TrailRenderer.js';
   import { TextureLoader } from './node_modules/three/src/loaders/TextureLoader.js';
+  import { AudioLoader } from './node_modules/three/src/loaders/AudioLoader.js';
+  import { AudioListener } from './node_modules/three/src/audio/AudioListener.js';
+  import { Audio } from './node_modules/three/src/audio/Audio.js';
   
     
     // EXAMPLE - GREEN ATTRACTED TO RED: rules.push(new Rule('Green', 'Red', 1.0));
@@ -158,6 +161,8 @@
     var palette_num = 0; // 0-7
     var has_trails = false;
     var trail_length = 20;
+
+    var music_vol = 0.3;
 
     //pColours = palettes[palette_num];
     for (let i = 0; i < colour_count; i++) {
@@ -251,6 +256,17 @@
       new THREE.Vector3( 1.5, 0.0, 0.0 ) 
     );
     
+
+    // MUSIC SETUP //
+    const listener = new THREE.AudioListener();
+    camera.add(listener);
+
+    // create a global audio source
+    const musicBot = new THREE.Audio( listener );
+
+    // load a sound and set it as the Audio object's buffer
+    const audioLoader = new THREE.AudioLoader();
+
 
     function CreateScene()
     {
@@ -630,6 +646,22 @@
     }
   }
 
+  function music_check() {
+    if (is_paused) {
+      musicBot.pause();
+      return;
+    }
+
+    if (musicBot.isPlaying) { musicBot.stop(); }
+    audioLoader.load( './music/loop' + colour_count + '.wav', function( buffer ) {
+      musicBot.setBuffer( buffer );
+      musicBot.setLoop( true );
+      musicBot.setVolume(music_vol);
+      musicBot.play();
+    });
+    
+  }
+
   var Animate = function() {
     if (!partitioning_toggle) {
       if (current_step % steps_till_update == 0) {
@@ -695,12 +727,16 @@
     col_count: colour_count,
     is_gridded: visualise_grid,
     trails: has_trails,
-    trail_l: trail_length
+    trail_l: trail_length,
+    vol: music_vol
   };
 
   let folderParameters = gui.addFolder("Parameters");
 
-  folderParameters.add(myStruct, "pause").name("Pause").onChange(value => { is_paused = value; });
+  folderParameters.add(myStruct, "pause").name("Pause").onChange(value => {
+    is_paused = value;
+    music_check();
+  });
   folderParameters.add(myStruct, "max_dist", 2, 50, 1).name("Max Force Dist").onChange(value => {
     max_force_dist = value;
     grid_scale = Math.min(Math.max(Math.floor(simulation_radius.x / (2 * max_force_dist)), 3), 6);
@@ -797,8 +833,15 @@
       particles[i].userData.pColourNum = c;
     }
 
+    // Music update
+    //if (colour_count != value) {
+    
+    //}
+
     colour_count = value;
     is_paused = pause_state;
+
+    music_check();
   });
   
 
@@ -940,6 +983,13 @@
   presetButtons.add(blankInteractionPreset,'BlankInteractionsPreset').name("Blank Interactions");
   presetButtons.add(randomiseAllInteractions,'RandomiseAllInteractions').name("Randomise All Interactions");
   presetButtons.add(randomiseInteractions,'RandomiseInteractions').name("Randomise Unlike Interactions");
+
+  // Music Controls
+  let audioParameters = gui.addFolder("Audio");
+  audioParameters.add(myStruct, "vol", 0.0, 1.0, 0.1).name("Music Volume").onChange(value => {
+    music_vol = value;
+    musicBot.setVolume(music_vol);
+  });
   
 
     </script>
